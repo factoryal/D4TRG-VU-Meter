@@ -1,20 +1,49 @@
-#define PIN_LATCH A4
-#define PIN_CLOCK A5
-#define PIN_DATA A3
-#define PIN_L_IN A1
+#include "FastLED/FastLED.h"
 
-byte level[9] = { 0x00, 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F, 0xFF };
+CRGB leds[8];
+
+enum {
+	LEFT = 0, RIGHT
+};
+
+class VU_LR {
+private:
+	uint8_t pin;
+
+public:
+	VU_LR(uint8_t ledPin) {
+
+	}
+
+};
+
+class VU_EQ {
+private:
+	uint8_t pin;
+
+public:
+	VU_EQ(uint8_t ledPin) {
+
+	}
+
+
+	void update() {
+
+	}
+
+};
+
+VU_EQ vu_eq[2] = { VU_EQ(A0), VU_EQ(A1)};
 
 void setup() {
-	digitalWrite(PIN_LATCH, 1);
-	pinMode(PIN_LATCH, 1);
-	pinMode(PIN_CLOCK, 1);
-	pinMode(PIN_DATA, 1);
+	FastLED.addLeds<WS2812B, A0>(leds, 8);
 }
 
 void loop() {
-
-	digitalWrite(PIN_LATCH, 0);
-	shiftOut(PIN_DATA, PIN_CLOCK, MSBFIRST, level[map(analogRead(PIN_L_IN), 0, 511, 0, 8)]);
-	digitalWrite(PIN_LATCH, 1);
+	for (int i = 0; i < 8; i++) {
+		leds[i].setRGB(0, 0, 255);
+		FastLED.show();
+		delay(100);
+		leds[i].setRGB(1, 1, 1);
+	}
 }
