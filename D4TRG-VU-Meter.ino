@@ -1,49 +1,24 @@
-#include "FastLED/FastLED.h"
-
-CRGB leds[8];
-
-enum {
-	LEFT = 0, RIGHT
-};
-
-class VU_LR {
-private:
-	uint8_t pin;
-
-public:
-	VU_LR(uint8_t ledPin) {
-
-	}
-
-};
-
-class VU_EQ {
-private:
-	uint8_t pin;
-
-public:
-	VU_EQ(uint8_t ledPin) {
-
-	}
+#include "pin_definition.h"
+#include "vu_meter.h"
 
 
-	void update() {
+VU_VOL vol;
 
-	}
-
-};
-
-VU_EQ vu_eq[2] = { VU_EQ(A0), VU_EQ(A1)};
 
 void setup() {
-	FastLED.addLeds<WS2812B, A0>(leds, 8);
+	cli();
+	TCCR1B |= 1 << 1; // clk/8
+	TIMSK1 |= 1 << TOIE1;
+	sei();
+	Serial.begin(115200);
+	
 }
 
 void loop() {
-	for (int i = 0; i < 8; i++) {
-		leds[i].setRGB(0, 0, 255);
-		FastLED.show();
-		delay(100);
-		leds[i].setRGB(1, 1, 1);
-	}
+	vol.debug();
+	vol.update();
+}
+
+ISR(TIMER1_OVF_vect) {
+	
 }
