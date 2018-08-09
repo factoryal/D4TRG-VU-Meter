@@ -22,6 +22,8 @@ https://fittingmedia.wordpress.com/2013/12/18/arduino-vu-meter/
 #define RIGHT_VOL_MID_VALUE	0 //407
 
 #define NUM_OF_SAMPLES 64
+#define PEAK_VOLUME_LINEAR_DECREASE_AMOUNT 5
+#define PEAK_EQ_LINEAR_DECREASE_AMOUNT 2
 
 enum {
 	LEFT = 0, RIGHT
@@ -45,12 +47,13 @@ private:
 	uint8_t vImag[2][NUM_OF_SAMPLES];
 	uint8_t vMagnitude[2][NUM_OF_SAMPLES];
 
-	PROGMEM const uint8_t frequencyIdx[8] = { 5, 9, 14, 21, 29, 38, 48, 63 };
+	PROGMEM const uint8_t frequencyIdx[8] = { 4, 9, 14, 21, 29, 38, 48, 63 };
 
 public:
 	int vol[2] = { 0,0 };
 	int peak[2] = { 0,0 };
-	byte ev[2][NUM_OF_EQ_LEDS] = { { 0 } };
+	int ev[2][NUM_OF_EQ_LEDS] = { { 0 } };
+	int evpeak[2][NUM_OF_EQ_LEDS] = { { 0 } };
 
 	SignalProcessor() {
 		//ADCSRA = (1 << ADEN) | (1 << ADATE) | (1 << ADPS2) | (1 << ADPS0); // 0xA5;
@@ -60,7 +63,7 @@ public:
 	// return true if the new data ready.
 	bool update() {
 		// read audio signal
-		cli();
+		//cli();
 		vReal[LEFT][sidx] = (analogRead(AUDIO_INPUT_LEFT) - LEFT_VOL_MID_VALUE);
 		vReal[RIGHT][sidx] = (analogRead(AUDIO_INPUT_RIGHT) - RIGHT_VOL_MID_VALUE);
 		
@@ -88,7 +91,9 @@ public:
 			sidx = 0;
 			
 			// find peak value
-			peak[LEFT] -= 20; peak[RIGHT] -= 20;
+			peak[LEFT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
+			peak[RIGHT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
+
 			for (int i = 0; i < NUM_OF_SAMPLES; i++) {
 				if (peak[LEFT] < vReal[LEFT][i]) peak[LEFT] = vReal[LEFT][i];
 				if (peak[RIGHT] < vReal[RIGHT][i]) peak[RIGHT] = vReal[RIGHT][i];
@@ -113,8 +118,14 @@ public:
 					ev[LEFT][i] += vMagnitude[LEFT][j];
 					ev[RIGHT][i] += vMagnitude[RIGHT][j];
 				} while (++j < frequencyIdx[i]);
+
+				evpeak[LEFT][i] -= PEAK_EQ_LINEAR_DECREASE_AMOUNT;
+				evpeak[RIGHT][i] -= PEAK_EQ_LINEAR_DECREASE_AMOUNT;
+				if (evpeak[LEFT][i] < ev[LEFT][i]) evpeak[LEFT][i] = ev[LEFT][i];
+				if (evpeak[RIGHT][i] < ev[RIGHT][i]) evpeak[RIGHT][i] = ev[RIGHT][i];
+				
 			}
-			sei();
+			//sei();
 			/*for (int i = 0; i < NUM_OF_EQ_LEDS; i++) {
 				Serial.write('\t');
 				Serial.print(ev[LEFT][i]);
@@ -192,7 +203,7 @@ public:
 	void push() {
 		for (int j = 0; j < 2; j++) {
 			for (int i = 0; i < NUM_OF_EQ_LEDS; i++) {
-				ch[j][i].setHSV(colorSpace[i], 255, sp.ev[j][i] * 6);
+				ch[j][i].setHSV(colorSpace[i], 255, sp.evpeak[j][i] * 8);
 			}
 		}
 	}
