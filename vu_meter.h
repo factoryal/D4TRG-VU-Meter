@@ -7,13 +7,14 @@ https://fittingmedia.wordpress.com/2013/12/18/arduino-vu-meter/
 #include "Arduino.h"
 
 #include "FastLED/FastLED.h"
-//#include "FFT/arduinoFFT.h"
 #include "fix_fft.h"
 
-#define PIN_VL PIN_VOLUME_LEFT
-#define PIN_VR PIN_VOLUME_RIGHT
-#define PIN_EL PIN_EQ_LEFT
-#define PIN_ER PIN_EQ_RIGHT
+#include "AnalogReadFast.h"
+
+#define PIN_VL PIN_VU_LEFT
+#define PIN_VR PIN_VU_RIGHT
+#define PIN_EL PIN_FU_LEFT
+#define PIN_ER PIN_FU_RIGHT
 
 #define NUM_OF_EQ_LEDS	8
 #define NUM_OF_VOL_LEDS	37
@@ -21,9 +22,11 @@ https://fittingmedia.wordpress.com/2013/12/18/arduino-vu-meter/
 #define LEFT_VOL_MID_VALUE	0 //407
 #define RIGHT_VOL_MID_VALUE	0 //407
 
-#define NUM_OF_SAMPLES 64
+#define NUM_OF_SAMPLES 128
 #define PEAK_VOLUME_LINEAR_DECREASE_AMOUNT 5
-#define PEAK_EQ_LINEAR_DECREASE_AMOUNT 2
+#define PEAK_EQ_LINEAR_DECREASE_AMOUNT 1
+
+static byte led_brightness_level = 4;
 
 enum {
 	LEFT = 0, RIGHT
@@ -37,62 +40,45 @@ class SignalProcessor {
 private:
 	int oldRead[2] = { 0,0 };
 	int nowRead[2] = { 0,0 };
-	//double samples[2][NUM_OF_SAMPLES] = { { 0 } };
 	uint8_t sidx = 0;
-
 	
-	
-	//arduinoFFT FFT = arduinoFFT();
 	uint8_t vReal[2][NUM_OF_SAMPLES];
 	uint8_t vImag[2][NUM_OF_SAMPLES];
 	uint8_t vMagnitude[2][NUM_OF_SAMPLES];
 
-	PROGMEM const uint8_t frequencyIdx[8] = { 4, 9, 14, 21, 29, 38, 48, 63 };
+	PROGMEM const uint8_t frequencyIdx[8] = { 8, 16, 24, 32, 40, 48, 56, 64 };
 
 public:
-	int vol[2] = { 0,0 };
-	int peak[2] = { 0,0 };
+	int vol[2] = { 0, 0 };
+	int peak[2] = { 0, 0 };
 	int ev[2][NUM_OF_EQ_LEDS] = { { 0 } };
 	int evpeak[2][NUM_OF_EQ_LEDS] = { { 0 } };
 
 	SignalProcessor() {
 		//ADCSRA = (1 << ADEN) | (1 << ADATE) | (1 << ADPS2) | (1 << ADPS0); // 0xA5;
+		pinMode(PIN_DIAG_1, 1);
 	}
 
 	// read audio input and process peak and frequency data.
 	// return true if the new data ready.
 	bool update() {
-		// read audio signal
-		//cli();
-		vReal[LEFT][sidx] = (analogRead(AUDIO_INPUT_LEFT) - LEFT_VOL_MID_VALUE);
-		vReal[RIGHT][sidx] = (analogRead(AUDIO_INPUT_RIGHT) - RIGHT_VOL_MID_VALUE);
+		vReal[LEFT][sidx] = (analogReadFast(AUDIO_INPUT_LEFT) - LEFT_VOL_MID_VALUE);
+		vReal[RIGHT][sidx] = (analogReadFast(AUDIO_INPUT_RIGHT) - RIGHT_VOL_MID_VALUE);
 		
-		/*ADMUX = AUDIO_INPUT_LEFT - A0;
-		ADCSRA |= 1 << ADSC;
-		while (!(ADCSRA & 0x10));
-		vReal[LEFT][sidx] = ADCH << 6 | ADCL >> 2;
-		ADMUX = AUDIO_INPUT_RIGHT - A0;
-		ADCSRA |= 1 << ADSC;
-		while (!(ADCSRA & 0x10));
-		vReal[RIGHT][sidx] = ADCH << 6 | ADCL >> 2;*/
 
 		vImag[LEFT][sidx] = 0;
 		vImag[RIGHT][sidx] = 0;
 
-		//for (int i = 0; i < 2; i++) {
-			//if (samples[i][sidx] < 0) samples[i][sidx] = 0; // -samples[i][sidx];
-			//samples[i][sidx] = (log(samples[i][sidx]) - 1) * 32;
-			//if (peak[i] < samples[i][sidx]) peak[i] = samples[i][sidx];
-			//peak[i] -= 1;
-			//vol[i] = map(peak[i], 0, 127, 0, NUM_OF_VOL_LEDS);
-		//}
 
 		if (++sidx >= NUM_OF_SAMPLES) {
+			digitalWrite(PIN_DIAG_1, 1);
 			sidx = 0;
-			
+
 			// find peak value
-			peak[LEFT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
-			peak[RIGHT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
+			peak[LEFT] = 0;
+			peak[RIGHT] = 0;
+			/*peak[LEFT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
+			peak[RIGHT] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;*/
 
 			for (int i = 0; i < NUM_OF_SAMPLES; i++) {
 				if (peak[LEFT] < vReal[LEFT][i]) peak[LEFT] = vReal[LEFT][i];
@@ -125,28 +111,19 @@ public:
 				if (evpeak[RIGHT][i] < ev[RIGHT][i]) evpeak[RIGHT][i] = ev[RIGHT][i];
 				
 			}
-			//sei();
-			/*for (int i = 0; i < NUM_OF_EQ_LEDS; i++) {
-				Serial.write('\t');
-				Serial.print(ev[LEFT][i]);
-				Serial.write(' ');
-			}
-			Serial.println();*/
+			digitalWrite(PIN_DIAG_1, 0);
 
 			return true;
 		}
 		
 		return false;
 	}
-
-	void push() {
-
-	}
 } sp;
 
 class VU_VOL {
 private:
 	CRGB ch[2][NUM_OF_VOL_LEDS];
+	const byte brightness[9] = { 0, 31, 63, 95, 127, 159, 191, 223, 255 };
 
 public:
 	VU_VOL() {
@@ -154,48 +131,30 @@ public:
 		FastLED.addLeds<WS2812B, PIN_VR>(ch[1], NUM_OF_VOL_LEDS);
 	}
 
-	void update() {
-
-
-	}
-
-	void debug() {
-		static int oldRead = 0;
-		static int peak = 0;
-		int nowRead = analogRead(A0)-407;
-		//Serial.println(nowRead);
-		if (nowRead < 0) nowRead = -nowRead;
-		nowRead = log((nowRead)) * 32-32;
-		if (peak < nowRead) peak = nowRead;
-		peak -= 2;
-		//peak = nowRead;
-		int v = map(peak, 0, 127, 0, NUM_OF_VOL_LEDS-1);
-		for (int i = 0; i < NUM_OF_VOL_LEDS; i++) {
-			if(i<v) ch[LEFT][i].setRGB(i >= 20 ? 255 : 0, i <= 30 ? 255 : 0, 0);
-			else ch[LEFT][i].setRGB(0, 0, 0);
-		}
-		FastLED.show();
-		oldRead = nowRead;
-	}
-
 	void push() {
+		static int p[2];
 		for (int j = 0; j < 2; j++) {
+			int s = 30 * log(sp.peak[j]);
+			if (p[j] < s) p[j] = s;
+			else p[j] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
+
+			int v = map(p[j], 0, 127, 0, NUM_OF_VOL_LEDS);
 			for (int i = 0; i < NUM_OF_VOL_LEDS; i++) {
-				if (i < map(sp.peak[j], 0, 255, 0, NUM_OF_VOL_LEDS))
-					ch[j][i].setRGB(i >= 20 ? 255 : 0, i <= 30 ? 255 : 0, 0);
+				if (i < v)
+					ch[j][i].setRGB(i >= 20 ? brightness[led_brightness_level] : 0, i <= 30 ? brightness[led_brightness_level] : 0, 0);
 				else ch[j][i].setRGB(0, 0, 0);
 			}
 		}
 	}
-} vol;
+} vu;
 
-class VU_EQ {
+class VU_FU {
 private:
 	CRGB ch[2][NUM_OF_EQ_LEDS];
 	PROGMEM const uint8_t colorSpace[NUM_OF_EQ_LEDS] = { 0, 28, 56, 84, 112, 140, 168, 196 };
 
 public:
-	VU_EQ() {
+	VU_FU() {
 		FastLED.addLeds<WS2812B, PIN_EL>(ch[0], NUM_OF_EQ_LEDS);
 		FastLED.addLeds<WS2812B, PIN_ER>(ch[1], NUM_OF_EQ_LEDS);
 	}
@@ -203,8 +162,8 @@ public:
 	void push() {
 		for (int j = 0; j < 2; j++) {
 			for (int i = 0; i < NUM_OF_EQ_LEDS; i++) {
-				ch[j][i].setHSV(colorSpace[i], 255, sp.evpeak[j][i] * 8);
+				ch[j][i].setHSV(colorSpace[i], 255, sp.evpeak[j][i] * 3 * led_brightness_level);
 			}
 		}
 	}
-} eq;
+} fu;
