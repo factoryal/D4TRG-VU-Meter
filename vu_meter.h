@@ -138,7 +138,7 @@ public:
 			if (p[j] < s) p[j] = s;
 			else p[j] -= PEAK_VOLUME_LINEAR_DECREASE_AMOUNT;
 
-			int v = map(p[j], 0, 127, 0, NUM_OF_VOL_LEDS);
+			int v = map(p[j], 0, 158, 0, NUM_OF_VOL_LEDS);
 			for (int i = 0; i < NUM_OF_VOL_LEDS; i++) {
 				if (i < v)
 					ch[j][i].setRGB(i >= 20 ? brightness[led_brightness_level] : 0, i <= 30 ? brightness[led_brightness_level] : 0, 0);
